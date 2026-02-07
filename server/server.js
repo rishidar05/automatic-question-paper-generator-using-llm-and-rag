@@ -1,4 +1,6 @@
 import express from 'express';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import Groq from 'groq-sdk';
@@ -25,6 +27,9 @@ sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
 app.use(cors());
 app.use(express.json());
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+app.use(express.static(path.join(__dirname, '../client/dist')));
 
 // Logger
 app.use((req, res, next) => {
@@ -331,6 +336,11 @@ app.post('/api/generate-paper', authenticateToken, upload.single('file'), async 
         console.error('Error generating paper:', error);
         res.status(500).json({ error: 'Failed to generate paper', details: error.message });
     }
+});
+
+// Serve index.html for any other route (React Router)
+app.get('*', (req, res) => {
+    res.sendFile(path.resolve(__dirname, '../client/dist', 'index.html'));
 });
 
 app.listen(port, () => {
