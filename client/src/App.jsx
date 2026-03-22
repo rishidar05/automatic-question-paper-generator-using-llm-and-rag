@@ -3,7 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'r
 import axios from 'axios';
 import QuestionForm from './components/QuestionForm';
 import PaperDisplay from './components/PaperDisplay';
-import AuthPages from './components/AuthPages';
+import LoginPage from './components/LoginPage';
 import Background from './components/Background';
 import History from './components/History';
 import Solver from './components/Solver';
@@ -154,8 +154,8 @@ function AppContent() {
 
             <AnimatePresence mode="wait">
                 <Routes location={location} key={location.pathname}>
-                    <Route path="/auth" element={
-                        !isAuthenticated ? <AuthPages setAuth={setIsAuthenticated} /> : <Navigate to="/" />
+                    <Route path="/login" element={
+                        !isAuthenticated ? <LoginPage setAuth={setIsAuthenticated} /> : <Navigate to="/" />
                     } />
 
                     <Route path="/" element={
@@ -220,7 +220,7 @@ function AppContent() {
                                 )}
                             </motion.div>
                         ) : (
-                            <Navigate to="/auth" />
+                            <Navigate to="/login" />
                         )
                     } />
                 </Routes>

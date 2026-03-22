@@ -19,7 +19,7 @@ ExamGen AI is a modern, sci-fi themed web application that leverages advanced AI
 ### Advanced Tools
 -   **Smart Solver**: A dedicated "Solver" page where you can paste any question (or an entire paper) to get detailed AI solutions.
 -   **History**: Automatically saves all generated papers. View, reprint, or solve past papers at any time.
--   **Real verification**: Secure Signup/Login with real Email OTP verification (via SendGrid).
+-   **Real verification**: Secure Signup/Login with real Email OTP verification (via Brevo).
 
 ### UI/UX
 -   **Sci-Fi Aesthetic**: Glassmorphism, particle animations, and a "cool" dark mode interface.
@@ -33,7 +33,7 @@ ExamGen AI is a modern, sci-fi themed web application that leverages advanced AI
 -   **Backend**: Node.js, Express.js.
 -   **Database**: SQLite (File-based, zero configuration).
 -   **AI Engine**: Groq SDK (Llama-3.3-70b-versatile).
--   **Auth**: JWT (JSON Web Tokens), BCrypt (Password Hashing), SendGrid (Email OTP).
+-   **Login**: JWT (JSON Web Tokens), BCrypt (Password Hashing), Brevo (Email OTP).
 
 ---
 
@@ -51,7 +51,7 @@ It will automatically:
 ```bash
 cd server
 npm install
-npm start
+npm  run start
 ```
 
 **Frontend:**
@@ -65,7 +65,7 @@ npm run dev
 
 ## 📖 Usage Guide
 
-1.  **Auth**: Sign up with a real email. Check your inbox for the OTP code to verify and log in.
+1.  **Login**: Sign up with a real email. Check your inbox for the OTP code to verify and log in.
 2.  **Generator**: 
     -   Enter your **Syllabus** (e.g., "Physics: Kinematics, Newton's Laws").
     -   Select **Count**, **Difficulty**, and **Type**.
@@ -82,7 +82,7 @@ npm run dev
 
 ## 🔌 API Endpoints
 
-| Method | Endpoint | Description | Auth Required |
+| Method | Endpoint | Description | Login Required |
 | :--- | :--- | :--- | :--- |
 | `POST` | `/api/signup` | Create new account | No |
 | `POST` | `/api/login` | Login user | No |
@@ -99,7 +99,7 @@ npm run dev
 suman/
 ├── client/                 # React Frontend
 │   ├── src/
-│   │   ├── components/     # UI Components (Auth, History, Solver, etc.)
+│   │   ├── components/     # UI Components (Login, History, Solver, etc.)
 │   │   ├── App.jsx         # Main Router & State
 │   │   └── index.css       # Global Styles (Glassmorphism)
 │   └── package.json
@@ -107,7 +107,7 @@ suman/
 ├── server/                 # Express Backend
 │   ├── users.db            # SQLite Database (Users & Papers)
 │   ├── server.js           # Main Server Logic
-│   └── .env                # Secrets
+│   └── settings.json       # Secrets & Configuration
 │
 └── README.md
 ```

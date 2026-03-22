@@ -1,0 +1,16 @@
+﻿git : Everything up-to-date
+At line:1 char:1
++ git push --force https://gi
+thub.com/rishidar05/automatic
+-question-pap ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~
+    + CategoryInfo           
+   : NotSpecified    : 
+(Everything up-to    
+-date:String) [], R    
+emoteException
+    + FullyQualifiedErr    
+orId : NativeComman    dError
+ 

@@ -1,12 +1,12 @@
 import sqlite3 from 'sqlite3';
 import jwt from 'jsonwebtoken';
 import axios from 'axios';
-import dotenv from 'dotenv';
+import fs from 'fs';
 
-dotenv.config();
+const settings = JSON.parse(fs.readFileSync(new URL('./settings.json', import.meta.url)));
 
-const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_key_123';
-const PORT = process.env.PORT || 3000;
+const JWT_SECRET = settings.JWT_SECRET || 'super_secret_key_123';
+const PORT = settings.PORT || 3000;
 
 const db = new sqlite3.Database('users.db');
 

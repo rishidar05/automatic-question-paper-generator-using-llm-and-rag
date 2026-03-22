@@ -1,0 +1,9 @@
+{
+  "name": "examgen-ai",
+  "version": "1.0.0",
+  "scripts": {
+    "install-all": "npm install --prefix client && npm install --prefix server",
+    "build": "npm install --prefix client && npm run build --prefix client",
+    "start": "cd server && node server.js"
+  }
+}

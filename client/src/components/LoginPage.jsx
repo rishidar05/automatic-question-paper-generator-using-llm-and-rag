@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { Lock, Mail, User, ShieldCheck } from 'lucide-react';
 
-const AuthPages = ({ setAuth }) => {
+const LoginPage = ({ setAuth }) => {
     const [isLogin, setIsLogin] = useState(true);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -163,4 +163,4 @@ const AuthPages = ({ setAuth }) => {
     );
 };
 
-export default AuthPages;
+export default LoginPage;

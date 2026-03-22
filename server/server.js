@@ -2,7 +2,7 @@ import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import cors from 'cors';
-import dotenv from 'dotenv';
+import fs from 'fs';
 import Groq from 'groq-sdk';
 import sqlite3 from 'sqlite3';
 import bcrypt from 'bcryptjs';
@@ -15,20 +15,29 @@ const require = createRequire(import.meta.url);
 const pdf = require('pdf-parse');
 import mammoth from 'mammoth';
 
-const upload = multer({ storage: multer.memoryStorage() });
-
-dotenv.config();
+const getSetting = (key, defaultValue) => {
+    // Check environment variables first (for cloud deployment)
+    if (process.env[key]) return process.env[key];
+    
+    // Fallback to settings.json (for local development)
+    try {
+        const settings = JSON.parse(fs.readFileSync(new URL('./settings.json', import.meta.url)));
+        return settings[key] || defaultValue;
+    } catch (err) {
+        return defaultValue;
+    }
+};
 
 const app = express();
-const port = process.env.PORT || 3000;
-const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_key_123';
+const port = getSetting('PORT', 3000);
+const JWT_SECRET = getSetting('JWT_SECRET', 'super_secret_key_123');
 
 const client = new Brevo.BrevoClient({
-    apiKey: process.env.BREVO_API_KEY,
+    apiKey: getSetting('BREVO_API_KEY'),
 });
 
-if (!process.env.BREVO_API_KEY) {
-    console.error('CRITICAL ERROR: BREVO_API_KEY is not defined in .env');
+if (!getSetting('BREVO_API_KEY')) {
+    console.error('CRITICAL ERROR: BREVO_API_KEY is not defined');
 } else {
     console.log('Brevo API client initialized.');
 }
@@ -68,7 +77,7 @@ db.serialize(() => {
 });
 
 const groq = new Groq({
-    apiKey: process.env.GROQ_API_KEY
+    apiKey: getSetting('GROQ_API_KEY')
 });
 
 // Middleware

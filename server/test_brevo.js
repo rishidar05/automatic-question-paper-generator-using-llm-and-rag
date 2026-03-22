@@ -1,21 +1,21 @@
 import { BrevoClient } from '@getbrevo/brevo';
-import dotenv from 'dotenv';
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-dotenv.config({ path: path.join(__dirname, '.env') });
+const settings = JSON.parse(fs.readFileSync(path.join(__dirname, 'settings.json')));
 
 console.log('--- Brevo (Sendinblue) Diagnostic Script (v4) ---');
 
-if (!process.env.BREVO_API_KEY) {
-    console.error('ERROR: BREVO_API_KEY not found in .env file!');
+if (!settings.BREVO_API_KEY) {
+    console.error('ERROR: BREVO_API_KEY not found in settings file!');
     process.exit(1);
 }
 
 // Initialize the Brevo Client
 const client = new BrevoClient({
-    apiKey: process.env.BREVO_API_KEY,
+    apiKey: settings.BREVO_API_KEY,
 });
 
 const senderEmail = 'anderishidarreddy@gmail.com';

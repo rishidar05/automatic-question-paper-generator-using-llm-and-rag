@@ -1,8 +1,9 @@
 # Dependencies
 node_modules/
 
-# Environment Variables
+# Environment Variables & Settings
 .env
+settings.json
 
 # Database
 *.db
