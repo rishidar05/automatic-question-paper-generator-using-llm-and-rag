@@ -27,6 +27,8 @@ const AuthPages = ({ setAuth }) => {
                 // In real app we generally verify login, but here we enforce OTP for both
             }
         } catch (err) {
+            console.error('Auth Error Details:', err);
+            console.error('Response Data:', err.response?.data);
             setError(err.response?.data?.error || 'Authentication failed');
         } finally {
             setLoading(false);
@@ -37,10 +39,7 @@ const AuthPages = ({ setAuth }) => {
         e.preventDefault();
         setLoading(true);
         try {
-            const endpoint = isLogin ? '/api/verify-login' : '/api/verify-otp'; // Simpler: use same verify endpoint if mostly same logic, but let's stick to plan or simple verify-otp
-            // Since my server implementation uses 'verify-otp' for signup and 'login' returns requireOtp, wait
-            // Ah, for login, I should've made a verify-login endpoint or reused verify-otp.
-            // Let's assume verify-otp works for checking the OTP token in DB regardless of flow for this MVP.
+            // The server uses /api/verify-otp for both flows
             const res = await axios.post('/api/verify-otp', { email, otp });
 
             if (res.data.token) {
@@ -98,7 +97,11 @@ const AuthPages = ({ setAuth }) => {
                                 />
                             </div>
 
-                            {error && <p style={{ color: '#ef4444', marginBottom: '1rem' }}>{error}</p>}
+                            {error && (
+                                <div style={{ marginBottom: '1rem' }}>
+                                    <p style={{ color: '#ef4444', margin: 0 }}>{error}</p>
+                                </div>
+                            )}
 
                             <button type="submit" className="btn-primary" disabled={loading}>
                                 {loading ? 'Processing...' : (isLogin ? 'Login' : 'Sign Up')}
@@ -143,7 +146,11 @@ const AuthPages = ({ setAuth }) => {
                                 />
                             </div>
 
-                            {error && <p style={{ color: '#ef4444', marginBottom: '1rem' }}>{error}</p>}
+                            {error && (
+                                <div style={{ marginBottom: '1rem' }}>
+                                    <p style={{ color: '#ef4444', margin: 0 }}>{error}</p>
+                                </div>
+                            )}
 
                             <button type="submit" className="btn-primary" disabled={loading}>
                                 {loading ? 'Verifying...' : 'Verify & Login'}

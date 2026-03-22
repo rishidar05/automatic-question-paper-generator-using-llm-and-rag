@@ -18,7 +18,7 @@ const PaperDisplay = ({ syllabus, questions, reset }) => {
     useEffect(() => {
         if (!questions) return;
 
-        let parsed = questions;
+        let parsed = [...questions];
         // Legacy string array fallback
         if (parsed.length > 0 && typeof parsed[0] === 'string') {
             parsed = parsed.map((q, i) => ({
@@ -29,6 +29,25 @@ const PaperDisplay = ({ syllabus, questions, reset }) => {
                 answer: '',
                 difficulty: 'medium'
             }));
+        } else {
+            // Group questions by section blocks to prevent duplicate headers
+            const sectionOrder = [];
+            parsed.forEach(q => {
+                if (q.section && !sectionOrder.includes(q.section)) {
+                    sectionOrder.push(q.section);
+                }
+            });
+
+            if (sectionOrder.length > 0) {
+                parsed.sort((a, b) => {
+                    const idxA = a.section ? sectionOrder.indexOf(a.section) : 999;
+                    const idxB = b.section ? sectionOrder.indexOf(b.section) : 999;
+                    if (idxA === idxB) {
+                        return (a.id || 0) - (b.id || 0); // Keep relative order
+                    }
+                    return idxA - idxB;
+                });
+            }
         }
         setQList(parsed);
     }, [questions]);
@@ -66,6 +85,20 @@ const PaperDisplay = ({ syllabus, questions, reset }) => {
             if (y > 270) {
                 doc.addPage();
                 y = 20;
+            }
+
+            // Section Rendering
+            if (q.section && (index === 0 || qList[index - 1].section !== q.section)) {
+                if (y > 260) { doc.addPage(); y = 20; }
+                doc.setFontSize(13);
+                doc.setFont('helvetica', 'bold');
+                const sectionText = doc.splitTextToSize(q.section.toUpperCase(), maxLineWidth);
+                doc.text(sectionText, margin, y);
+                y += (sectionText.length * 6) + 2;
+                doc.setLineWidth(0.2);
+                doc.line(margin, y, pageWidth - margin, y);
+                y += 6;
+                doc.setFontSize(11); // Reset font size
             }
 
             // Question Text
@@ -118,6 +151,17 @@ const PaperDisplay = ({ syllabus, questions, reset }) => {
 
         // Questions
         qList.forEach((q, index) => {
+            // Section check
+            if (q.section && (index === 0 || qList[index - 1].section !== q.section)) {
+                children.push(
+                    new Paragraph({
+                        text: q.section.toUpperCase(),
+                        heading: HeadingLevel.HEADING_2,
+                        spacing: { before: 400, after: 200 }
+                    })
+                );
+            }
+
             // Question Text
             children.push(
                 new Paragraph({
@@ -218,49 +262,67 @@ const PaperDisplay = ({ syllabus, questions, reset }) => {
 
                 {/* Questions */}
                 <div style={{ textAlign: 'left' }}>
-                    {qList.map((q, index) => (
-                        <div key={q.id || index} style={{ marginBottom: '1.5rem', pageBreakInside: 'avoid' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                <div style={{ display: 'flex', gap: '0.5rem', flex: 1 }}>
-                                    <strong>{index + 1}.</strong>
-                                    <div style={{ width: '100%' }}>
-                                        {editMode ? (
-                                            <textarea
-                                                value={q.question}
-                                                onChange={e => handleUpdateQuestion(q.id, 'question', e.target.value)}
-                                                style={{ width: '100%', padding: '5px', border: '1px solid #ccc', fontFamily: 'inherit' }}
-                                            />
-                                        ) : (
-                                            <span style={{ fontSize: '1.1rem' }}>{q.question}</span>
-                                        )}
+                    {qList.map((q, index) => {
+                        const showSection = q.section && (index === 0 || qList[index - 1].section !== q.section);
 
-                                        {/* MCQ Options */}
-                                        {q.type === 'mcq' && q.options && (
-                                            <div style={{ marginTop: '0.5rem', marginLeft: '1rem' }}>
-                                                {q.options.map((opt, i) => (
-                                                    <div key={i} style={{ marginBottom: '0.25rem' }}>
-                                                        {String.fromCharCode(65 + i)}. {opt}
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        )}
+                        return (
+                            <div key={q.id || index} style={{ marginBottom: '1.5rem', pageBreakInside: 'avoid' }}>
+                                {showSection && (
+                                    <h3 style={{
+                                        marginTop: index === 0 ? '0' : '2rem',
+                                        marginBottom: '1rem',
+                                        borderBottom: '1px solid rgba(0,0,0,0.1)',
+                                        paddingBottom: '0.5rem',
+                                        color: 'var(--primary)',
+                                        textTransform: 'uppercase',
+                                        fontWeight: '700',
+                                        fontSize: '1.2rem'
+                                    }}>
+                                        {q.section}
+                                    </h3>
+                                )}
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                    <div style={{ display: 'flex', gap: '0.5rem', flex: 1 }}>
+                                        <strong>{index + 1}.</strong>
+                                        <div style={{ width: '100%' }}>
+                                            {editMode ? (
+                                                <textarea
+                                                    value={q.question}
+                                                    onChange={e => handleUpdateQuestion(q.id, 'question', e.target.value)}
+                                                    style={{ width: '100%', padding: '5px', border: '1px solid #ccc', fontFamily: 'inherit' }}
+                                                />
+                                            ) : (
+                                                <span style={{ fontSize: '1.1rem' }}>{q.question}</span>
+                                            )}
 
-                                        {/* Answers & Explanations */}
-                                        {showAnswers && q.answer && (
-                                            <div style={{ marginTop: '0.5rem', padding: '0.5rem', background: '#f0fdf4', borderLeft: '4px solid #22c55e', color: '#166534', fontSize: '0.9rem' }}>
-                                                <strong>Answer:</strong> {q.answer}
-                                            </div>
-                                        )}
+                                            {/* MCQ Options */}
+                                            {q.type === 'mcq' && q.options && (
+                                                <div style={{ marginTop: '0.5rem', marginLeft: '1rem' }}>
+                                                    {q.options.map((opt, i) => (
+                                                        <div key={i} style={{ marginBottom: '0.25rem' }}>
+                                                            {String.fromCharCode(65 + i)}. {opt}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+
+                                            {/* Answers & Explanations */}
+                                            {showAnswers && q.answer && (
+                                                <div style={{ marginTop: '0.5rem', padding: '0.5rem', background: '#f0fdf4', borderLeft: '4px solid #22c55e', color: '#166534', fontSize: '0.9rem' }}>
+                                                    <strong>Answer:</strong> {q.answer}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Mark / Actions */}
+                                    <div style={{ marginLeft: '1rem', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                        <span style={{ fontWeight: 'bold' }}>[{q.marks || (q.type === 'mcq' ? 1 : 5)}]</span>
                                     </div>
                                 </div>
-
-                                {/* Mark / Actions */}
-                                <div style={{ marginLeft: '1rem', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                    <span style={{ fontWeight: 'bold' }}>[{q.marks || (q.type === 'mcq' ? 1 : 5)}]</span>
-                                </div>
                             </div>
-                        </div>
-                    ))}
+                        )
+                    })}
                 </div>
             </div>
         </div>

@@ -5,9 +5,9 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import Groq from 'groq-sdk';
 import sqlite3 from 'sqlite3';
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import sgMail from '@sendgrid/mail';
+import * as Brevo from '@getbrevo/brevo';
 import multer from 'multer';
 import { createRequire } from 'module';
 
@@ -23,7 +23,15 @@ const app = express();
 const port = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_key_123';
 
-sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+const client = new Brevo.BrevoClient({
+    apiKey: process.env.BREVO_API_KEY,
+});
+
+if (!process.env.BREVO_API_KEY) {
+    console.error('CRITICAL ERROR: BREVO_API_KEY is not defined in .env');
+} else {
+    console.log('Brevo API client initialized.');
+}
 
 app.use(cors());
 app.use(express.json());
@@ -77,24 +85,29 @@ const authenticateToken = (req, res, next) => {
     });
 };
 
-// Email Helper
+// Helpers
+const generateOtp = () => {
+    return Math.floor(100000 + Math.random() * 900000).toString();
+};
+
 const sendOtpEmail = async (email, otp) => {
-    const msg = {
-        to: email,
-        from: 'anderishidarreddy@gmail.com', // Verified sender
-        subject: 'Your ExamGen AI Verification Code',
-        text: `Your OTP is: ${otp}`,
-        html: `<strong>Your OTP is: ${otp}</strong>`,
-    };
+    console.log(`Attempting to send OTP email to: ${email} via Brevo`);
     try {
-        await sgMail.send(msg);
-        console.log(`Email sent to ${email}`);
+        await client.transactionalEmails.sendTransacEmail({
+            subject: "Your ExamGen AI Verification Code",
+            htmlContent: `<html><body><strong>Your OTP is: ${otp}</strong><p>This code will expire shortly.</p></body></html>`,
+            sender: { name: "ExamGen AI", email: "anderishidarreddy@gmail.com" },
+            to: [{ email: email }]
+        });
+        console.log('--- Brevo SUCCESS ---');
+        console.log(`Email successfully sent to ${email}`);
     } catch (error) {
-        console.error('SendGrid Error:', error);
-        if (error.response) console.error(error.response.body);
-        // Fallback to console for demo if email fails
+        console.error('--- Brevo ERROR ---');
+        console.error('Error Details:', error);
+
+        // Fallback to console for development
         console.log('\n====================================================');
-        console.log(` FALLBACK OTP (Use this to login): ${otp}`);
+        console.log(` DEV FALLBACK OTP (Use this to login): ${otp}`);
         console.log('====================================================\n');
     }
 };
@@ -104,39 +117,66 @@ const sendOtpEmail = async (email, otp) => {
 // Signup
 app.post('/api/signup', async (req, res) => {
     const { email, password } = req.body;
+    console.log(`Signup attempt for: ${email}`);
     if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
 
     try {
+        console.log('Hashing password...');
         const hashedPassword = await bcrypt.hash(password, 10);
-        const otp = '123456'; // Default for Development
+        const otp = generateOtp();
 
+        console.log('Inserting user into DB...');
         db.run('INSERT INTO users (email, password, otp) VALUES (?, ?, ?)', [email, hashedPassword, otp], async function (err) {
             if (err) {
+                console.error('DB Insert Error:', err.message);
                 if (err.message.includes('UNIQUE constraint')) return res.status(400).json({ error: 'User already exists' });
                 return res.status(500).json({ error: err.message });
             }
+            console.log('Sending OTP email...');
             await sendOtpEmail(email, otp);
             res.json({ message: 'Signup successful. Check your email for OTP.' });
         });
     } catch (err) {
+        console.error('Signup Catch Error:', err.message);
         res.status(500).json({ error: err.message });
     }
 });
 
 // Verify OTP
 app.post('/api/verify-otp', (req, res) => {
-    const { email, otp } = req.body;
-    db.get('SELECT * FROM users WHERE email = ?', [email], (err, user) => {
-        if (err || !user) return res.status(400).json({ error: 'User not found' });
+    let { email, otp } = req.body;
 
-        if (user.otp === otp) {
+    // Clean inputs
+    email = email?.trim();
+    otp = otp?.trim();
+
+    console.log(`Verification attempt: Email[${email}] OTP[${otp}]`);
+
+    db.get('SELECT * FROM users WHERE email = ?', [email], (err, user) => {
+        if (err || !user) {
+            console.warn(`Verification Failed: User not found for email: ${email}`);
+            return res.status(400).json({ error: 'User not found' });
+        }
+
+        console.log(`Found user in DB. Stored OTP: [${user.otp}]`);
+
+        // Secure verification (no bypass)
+        if (user.otp === otp && otp !== null) {
             db.run('UPDATE users SET is_verified = 1, otp = NULL WHERE id = ?', [user.id]);
             const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: '1h' });
+            console.log('Verification SUCCESS');
             return res.json({ token, message: 'Verified successfully' });
         } else {
+            console.warn(`Verification Failed: OTP mismatch. Expected [${user.otp}], got [${otp}]`);
             return res.status(400).json({ error: 'Invalid OTP' });
         }
     });
+});
+
+// Verify Token
+app.get('/api/verify', authenticateToken, (req, res) => {
+    console.log(`Checking token for user: ${req.user.email}`);
+    res.json({ valid: true, user: req.user });
 });
 
 // Login
@@ -147,7 +187,7 @@ app.post('/api/login', (req, res) => {
 
         const match = await bcrypt.compare(password, user.password);
         if (match) {
-            const otp = '123456'; // Default for Development
+            const otp = generateOtp();
             db.run('UPDATE users SET otp = ? WHERE id = ?', [otp, user.id], async (err) => {
                 if (err) return res.status(500).json({ error: 'Db error' });
                 await sendOtpEmail(email, otp);
@@ -195,19 +235,50 @@ app.post('/api/solve', authenticateToken, async (req, res) => {
 });
 
 // Protected Paper Generation with Save [ENHANCED]
-app.post('/api/generate-paper', authenticateToken, upload.single('file'), async (req, res) => {
+app.post('/api/generate-paper', authenticateToken, upload.fields([
+    { name: 'file', maxCount: 1 },
+    { name: 'patternFile', maxCount: 1 }
+]), async (req, res) => {
     try {
-        const { syllabus, count, difficulty = 'medium', type = 'mix' } = req.body;
+        const { count, difficulty = 'medium', type = 'mix' } = req.body;
+        const mainFile = req.files['file'] ? req.files['file'][0] : null;
+        const patternFile = req.files['patternFile'] ? req.files['patternFile'][0] : null;
 
-        if (!syllabus) {
-            return res.status(400).json({ error: 'Syllabus is required' });
+        const syllabusTitle = mainFile ? mainFile.originalname : 'Uploaded File';
+
+        if (!mainFile) {
+            return res.status(400).json({ error: 'Syllabus file is required' });
         }
 
         console.log('--- Request Debug ---');
         console.log('Body:', req.body);
-        console.log('File present:', !!req.file);
+        console.log('Syllabus File present:', !!mainFile);
+        console.log('Pattern File present:', !!patternFile);
 
         const numQuestions = count || 5;
+
+        // Extraction helper
+        const extractText = async (fileObj) => {
+            if (!fileObj) return '';
+            if (fileObj.mimetype === 'application/pdf') {
+                const pdfData = await pdf(fileObj.buffer);
+                return pdfData.text;
+            } else if (fileObj.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+                const result = await mammoth.extractRawText({ buffer: fileObj.buffer });
+                return result.value;
+            } else {
+                return fileObj.buffer.toString();
+            }
+        };
+
+        const fileText = await extractText(mainFile);
+        const patternText = await extractText(patternFile);
+
+        if (!fileText || fileText.trim().length < 50) {
+            return res.status(400).json({
+                error: 'Unable to read text from syllabus file. If this is a scanned PDF, please convert it to a text-based PDF or DOCX.'
+            });
+        }
 
         // Strict Type Enforcement
         let typeInstruction = "";
@@ -215,105 +286,84 @@ app.post('/api/generate-paper', authenticateToken, upload.single('file'), async 
             typeInstruction = "Strictly generate ONLY Multiple Choice Questions (MCQ).";
         } else if (type === 'short' || type === 'long') {
             typeInstruction = "Strictly generate ONLY text-based questions. DO NOT include options. Return 'null' for options field.";
-        } else {
+        } else if (type === 'mix') {
             typeInstruction = "Generate a balanced mix of Multiple Choice Questions (MCQ), Short Answer, and Long Answer questions.";
+        } else {
+            typeInstruction = "Determine the question format automatically based on the provided sample pattern.";
         }
 
-        let fileText = '';
-        if (req.file) {
-            if (req.file.mimetype === 'application/pdf') {
-                try {
-                    const pdfData = await pdf(req.file.buffer);
-                    fileText = pdfData.text;
-                } catch (e) {
-                    console.error('PDF Parse Error', e);
-                    throw new Error('Failed to parse PDF content');
-                }
-            } else if (req.file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-                try {
-                    const result = await mammoth.extractRawText({ buffer: req.file.buffer });
-                    fileText = result.value;
-                } catch (e) {
-                    console.error('DOCX Parse Error', e);
-                    throw new Error('Failed to parse DOCX content');
-                }
+        let parsedCount = parseInt(count);
+        let hasPattern = patternText && patternText.trim().length > 0;
+
+        // Construct structural instructions
+        const fullSyllabusContext = fileText;
+        let structureInstruction = "";
+        let patternContext = "";
+
+        if (hasPattern) {
+            if (!isNaN(parsedCount) && parsedCount > 0) {
+                patternContext = `\n[SAMPLE PATTERN - FOR STRUCTURAL REFERENCE ONLY]\n${patternText}\n[END SAMPLE PATTERN]\n`;
+                structureInstruction = `CRITICAL RULES:
+1. Generate EXACTLY ${parsedCount} completely NEW questions based ONLY on the SYLLABUS provided.
+2. DO NOT duplicate or copy questions from the SAMPLE PATTERN. The pattern is provided ONLY so you can see how sections are named (e.g., Section A) and how marks are assigned.
+3. Include the "section" name for each question based on how the pattern divides them.
+4. Your output must contain exactly ${parsedCount} items in the JSON array.
+Combine this with the format instruction: ${typeInstruction}`;
             } else {
-                fileText = req.file.buffer.toString();
+                patternContext = `\n[SAMPLE PATTERN - CLONE EXACT STRUCTURE]\n${patternText}\n[END SAMPLE PATTERN]\n`;
+                structureInstruction = `CRITICAL RULES:
+1. Count the exact number of questions in the SAMPLE PATTERN and generate EXACTLY that many NEW questions based ONLY on the SYLLABUS.
+2. You must perfectly mimic the Sections, Marks distribution, and Question Types of the pattern, but the actual question content MUST be new and derived from the SYLLABUS. DO NOT copy pattern questions.
+3. Include the "section" name for each question exactly as they appear in the pattern.
+Combine this with the format instruction: ${typeInstruction}`;
             }
-            console.log('--- DEBUG: File Upload Info ---');
-            console.log('MimeType:', req.file.mimetype);
-            console.log('Size:', req.file.size);
-            console.log('Extracted Text Preview:', fileText.substring(0, 500));
-            console.log('-------------------------------');
-
-            if (!fileText || fileText.trim().length < 50) {
-                return res.status(400).json({
-                    error: 'Unable to read text from file. If this is a scanned PDF (images), please convert it to a text-based PDF or DOCX file.'
-                });
-            }
+        } else {
+            const finalCount = (!isNaN(parsedCount) && parsedCount > 0) ? parsedCount : 5;
+            structureInstruction = `Generate exactly ${finalCount} NEW questions based on the SYLLABUS. ${typeInstruction}`;
         }
 
-        let finalSystemPrompt;
-
-        if (req.file) {
-            // Stronger prompt for file upload case
-            finalSystemPrompt = `You are an expert exam setter.
-            CRITICAL INSTRUCTION: You must completely IGNORE the default "count", "difficulty", and "type" parameters.
+        const finalSystemPrompt = `You are an expert AI question paper generator.
             
-            YOUR GOAL: Generate a question paper for Syllabus: "${syllabus}" by STRICTLY following the format/structure defined in the FILE CONTENT below.
+            TASK: Generate a question paper in JSON format.
             
-            --- BEGIN FILE CONTENT ---
-            ${fileText}
-            --- END FILE CONTENT ---
+            TOPIC SOURCE (SYLLABUS):
+            "${fullSyllabusContext}"
 
-            INSTRUCTIONS:
-            1. ANALYZE the file to understand the Structure (Count, Types, Marks).
-            2. Generate NEW UNIQUE questions based on the Syllabus: "${syllabus}".
-            3. DO NOT COPY any questions from the file. Use the file ONLY as a structure template.
-            4. If the file has 5 MCQs, generate 5 NEW MCQs.
-            5. The Structure (counts/types) must match the file exactly, but the Content must be new.
+            ${patternContext}
 
-            OUTPUT FORMAT:
-            Start the response with a valid JSON object.
-            Schema:
+            === CRITICAL GENERATION INSTRUCTIONS ===
+            DIFFICULTY LEVEL: ${difficulty}
+            
+            ${structureInstruction}
+            ========================================
+            
+            CONSTRAINT: Output MUST be a valid JSON object ONLY. No conversational text.
+            
+            JSON SCHEMA:
             {
-                "plan": "Briefly state what structure you identified in the file",
                 "questions": [
                     {
                         "id": number,
+                        "section": "string | null (e.g., 'Section A: Theory')",
                         "type": "mcq" | "short" | "long",
-                        "question": "The question text",
-                        "options": ["Option A", "Option B", "Option C", "Option D"] (ONLY if type is mcq, otherwise null),
-                        "answer": "The correct answer or key points",
+                        "question": "string",
+                        "options": ["string", "string", "string", "string"] | null,
+                        "answer": "string",
                         "marks": number
                     }
                 ]
             }
-            Do not include markdown.`;
-        } else {
-            // Default prompt for manual settings
-            finalSystemPrompt = `You are a helpful assistant that generates expert question papers. 
-            Generate ${numQuestions} questions based on Syllabus: "${syllabus}".
-            Difficulty Level: ${difficulty}.
-            Question Type: ${type} (${typeInstruction}).
-            
-            The output must be a valid JSON object with a key "questions" which is an array of objects.
-            Each object MUST follow this schema:
-            {
-                "id": number,
-                "type": "mcq" | "short" | "long",
-                "question": "The question text",
-                "options": ["Option A", "Option B", "Option C", "Option D"] (ONLY if type is mcq, otherwise null),
-                "answer": "The correct answer or key points",
-                "marks": number (e.g. 1 for mcq, 5 for long)
-            }
-            Do not include markdown or extra text.`;
+            `;
+
+        let userPromptText = "Generate now in JSON format.";
+        if (hasPattern && !isNaN(parsedCount) && parsedCount > 0) {
+            userPromptText = `CRITICAL COMMAND: Generate EXACTLY ${parsedCount} NEW questions now from the syllabus in JSON format. Do not mimic the pattern's length, only its style. You MUST return exactly ${parsedCount} items in the array.`;
         }
 
         const completion = await groq.chat.completions.create({
             messages: [
                 { role: "system", content: finalSystemPrompt },
-                { role: "user", content: "Generate now." }
+                { role: "user", content: userPromptText }
             ],
             model: "llama-3.3-70b-versatile",
             response_format: { type: "json_object" }
@@ -324,7 +374,7 @@ app.post('/api/generate-paper', authenticateToken, upload.single('file'), async 
 
         // Save to DB
         db.run('INSERT INTO papers (user_id, syllabus, questions) VALUES (?, ?, ?)',
-            [req.user.id, syllabus, JSON.stringify(result.questions)],
+            [req.user.id, syllabusTitle, JSON.stringify(result.questions)],
             function (err) {
                 if (err) console.error('Failed to save paper:', err);
             }

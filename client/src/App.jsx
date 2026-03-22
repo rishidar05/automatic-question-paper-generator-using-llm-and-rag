@@ -17,10 +17,11 @@ function AppContent() {
 
     // App State
     const [syllabus, setSyllabus] = useState('');
-    const [count, setCount] = useState(5);
+    const [count, setCount] = useState('');
     const [difficulty, setDifficulty] = useState('medium');
-    const [type, setType] = useState('mix');
+    const [type, setType] = useState('auto');
     const [file, setFile] = useState(null);
+    const [patternFile, setPatternFile] = useState(null);
     const [questions, setQuestions] = useState(null);
     const [genLoading, setGenLoading] = useState(false);
     const [error, setError] = useState(null);
@@ -32,11 +33,26 @@ function AppContent() {
     const location = useLocation();
 
     useEffect(() => {
-        const token = localStorage.getItem('token');
-        if (token) {
-            setIsAuthenticated(true);
-        }
-        setLoading(false);
+        const verifyToken = async () => {
+            const token = localStorage.getItem('token');
+            if (token) {
+                try {
+                    console.log("Verifying existing token...");
+                    await axios.get('/api/verify', {
+                        headers: { Authorization: `Bearer ${token}` }
+                    });
+                    setIsAuthenticated(true);
+                } catch (err) {
+                    console.error('Token verification failed', err);
+                    localStorage.removeItem('token');
+                    setIsAuthenticated(false);
+                }
+            } else {
+                setIsAuthenticated(false);
+            }
+            setLoading(false);
+        };
+        verifyToken();
     }, []);
 
     const logout = () => {
@@ -57,14 +73,15 @@ function AppContent() {
         try {
 
             const formData = new FormData();
-            formData.append('syllabus', syllabus);
+            formData.append('count', parseInt(count));
+            formData.append('difficulty', difficulty);
+            formData.append('type', type);
 
             if (file) {
                 formData.append('file', file);
-            } else {
-                formData.append('count', parseInt(count));
-                formData.append('difficulty', difficulty);
-                formData.append('type', type);
+            }
+            if (patternFile) {
+                formData.append('patternFile', patternFile);
             }
 
             const response = await axios.post('/api/generate-paper', formData, {
@@ -95,10 +112,10 @@ function AppContent() {
     if (loading) return <div style={{ color: 'white', textAlign: 'center', marginTop: '20%' }}>Loading...</div>;
 
     return (
-        <div>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
             <Background />
 
-            <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+            <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexShrink: 0 }}>
                 <h1 className="title" style={{ margin: 0, fontSize: '2.5rem', textAlign: 'left' }}>
                     <Sparkles size={32} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '1rem' }} />
                     ExamGen AI
@@ -148,6 +165,7 @@ function AppContent() {
                                 initial={{ opacity: 0, y: 20 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 exit={{ opacity: 0, y: -20 }}
+                                style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}
                             >
                                 {view === 'history' ? (
                                     !historyPaper ? (
@@ -167,7 +185,7 @@ function AppContent() {
                                 ) : view === 'solver' ? (
                                     <Solver />
                                 ) : (
-                                    <div className="glass-card">
+                                    <div className="glass-card" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                                         {!questions ? (
                                             <QuestionForm
                                                 syllabus={syllabus}
@@ -180,6 +198,8 @@ function AppContent() {
                                                 setType={setType}
                                                 file={file}
                                                 setFile={setFile}
+                                                patternFile={patternFile}
+                                                setPatternFile={setPatternFile}
                                                 generatePaper={generatePaper}
                                                 loading={genLoading}
                                             />

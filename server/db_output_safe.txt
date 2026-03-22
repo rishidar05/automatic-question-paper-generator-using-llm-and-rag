@@ -1,0 +1,13 @@
+--- DB Check Start ---
+Users in DB:
+┌─────────┬────┬───────────────────────────────┬─────────────┐
+│ (index) │ id │ email                         │ is_verified │
+├─────────┼────┼───────────────────────────────┼─────────────┤
+│ 0       │ 1  │ 'admin@test.com'              │ 1           │
+│ 1       │ 2  │ 'balichaksumann@gmail.com'    │ 1           │
+│ 2       │ 3  │ 'arun9912568011@gmail.com'    │ 0           │
+│ 3       │ 4  │ 'anderishidarreddy@gmail.com' │ 1           │
+│ 4       │ 5  │ 'rishibunny79@gmail.com'      │ 1           │
+│ 5       │ 6  │ 'andesanthoshi@gmail.com'     │ 1           │
+└─────────┴────┴───────────────────────────────┴─────────────┘
+--- DB Check End ---
