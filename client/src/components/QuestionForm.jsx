@@ -32,7 +32,7 @@ const QuestionForm = ({ syllabus, setSyllabus, count, setCount, difficulty, setD
                                 <Upload size={20} color="var(--text-secondary)" style={{ marginBottom: '0.5rem' }} />
                                 <input
                                     type="file"
-                                    accept=".txt,.pdf,.docx"
+                                    accept=".txt,.pdf,.docx,.jpg,.jpeg,.png"
                                     onChange={(e) => setFile(e.target.files[0])}
                                     style={{
                                         position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
@@ -91,7 +91,7 @@ const QuestionForm = ({ syllabus, setSyllabus, count, setCount, difficulty, setD
                                 <Upload size={20} color="var(--text-secondary)" style={{ marginBottom: '0.5rem' }} />
                                 <input
                                     type="file"
-                                    accept=".txt,.pdf,.docx"
+                                    accept=".txt,.pdf,.docx,.jpg,.jpeg,.png"
                                     onChange={(e) => setPatternFile(e.target.files[0])}
                                     style={{
                                         position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',

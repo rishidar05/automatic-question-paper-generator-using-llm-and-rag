@@ -4,7 +4,7 @@ import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } fro
 import { saveAs } from 'file-saver';
 import { Download, RefreshCcw, Edit2, Eye, EyeOff, FileText, Printer } from 'lucide-react';
 
-const PaperDisplay = ({ syllabus, questions, reset }) => {
+const PaperDisplay = ({ syllabus, questions, paperMetadata, reset }) => {
     const paperRef = useRef();
 
     // State
@@ -240,7 +240,7 @@ const PaperDisplay = ({ syllabus, questions, reset }) => {
                 {/* Branding Headers */}
                 <div style={{ textAlign: 'center', marginBottom: '2rem', borderBottom: '2px solid black', paddingBottom: '1rem' }}>
                     {editMode ? (
-                        <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', marginBottom: '0.5rem' }}>
+                        <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
                             <input
                                 placeholder="School Name"
                                 value={schoolName} onChange={e => setSchoolName(e.target.value)}
@@ -252,6 +252,38 @@ const PaperDisplay = ({ syllabus, questions, reset }) => {
                                 style={{ padding: '5px', border: '1px solid #ccc' }}
                             />
                         </div>
+                    ) : paperMetadata && paperMetadata.institution_name ? (
+                        <>
+                            <h2 style={{ margin: '0 0 0.25rem 0', textTransform: 'uppercase', fontSize: '1.3rem', fontWeight: '800' }}>
+                                {schoolName || paperMetadata.institution_name}
+                            </h2>
+                            {paperMetadata.subtitle && (
+                                <p style={{ margin: '0 0 0.25rem 0', fontSize: '0.8rem', color: '#555' }}>{paperMetadata.subtitle}</p>
+                            )}
+                            {paperMetadata.exam_info && (
+                                <p style={{ margin: '0 0 0.25rem 0', fontSize: '0.85rem', fontWeight: '600' }}>{paperMetadata.exam_info}</p>
+                            )}
+                            {paperMetadata.subject_code_name && (
+                                <p style={{ margin: '0 0 0.25rem 0', fontSize: '0.95rem', fontWeight: '700' }}>{paperMetadata.subject_code_name}</p>
+                            )}
+                            {paperMetadata.branch && (
+                                <p style={{ margin: '0 0 0.25rem 0', fontSize: '0.85rem' }}>({paperMetadata.branch})</p>
+                            )}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.75rem', fontSize: '0.9rem', fontWeight: '600' }}>
+                                <span>Time: {paperMetadata.duration || '---'}</span>
+                                <span>Max. Marks: {paperMetadata.max_marks || '---'}</span>
+                            </div>
+                            {paperMetadata.general_instructions && paperMetadata.general_instructions.length > 0 && (
+                                <div style={{ textAlign: 'left', marginTop: '0.75rem', fontSize: '0.85rem', lineHeight: '1.6' }}>
+                                    <strong>Note:</strong>
+                                    <ol style={{ margin: '0.25rem 0 0 1.25rem', paddingLeft: 0 }}>
+                                        {paperMetadata.general_instructions.map((inst, i) => (
+                                            <li key={i}>{inst}</li>
+                                        ))}
+                                    </ol>
+                                </div>
+                            )}
+                        </>
                     ) : (
                         <>
                             <h2 style={{ margin: '0 0 0.5rem 0', textTransform: 'uppercase' }}>{schoolName || 'EXAMINATION PAPER'}</h2>
@@ -270,7 +302,7 @@ const PaperDisplay = ({ syllabus, questions, reset }) => {
                                 {showSection && (
                                     <h3 style={{
                                         marginTop: index === 0 ? '0' : '2rem',
-                                        marginBottom: '1rem',
+                                        marginBottom: '0.5rem',
                                         borderBottom: '1px solid rgba(0,0,0,0.1)',
                                         paddingBottom: '0.5rem',
                                         color: 'var(--primary)',
@@ -280,6 +312,19 @@ const PaperDisplay = ({ syllabus, questions, reset }) => {
                                     }}>
                                         {q.section}
                                     </h3>
+                                )}
+                                {showSection && q.section_instruction && (
+                                    <p style={{
+                                        fontSize: '0.9rem',
+                                        fontStyle: 'italic',
+                                        color: '#555',
+                                        marginTop: '0',
+                                        marginBottom: '1rem',
+                                        paddingLeft: '0.5rem',
+                                        borderLeft: '3px solid var(--primary)'
+                                    }}>
+                                        {q.section_instruction}
+                                    </p>
                                 )}
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                                     <div style={{ display: 'flex', gap: '0.5rem', flex: 1 }}>
@@ -324,6 +369,20 @@ const PaperDisplay = ({ syllabus, questions, reset }) => {
                         )
                     })}
                 </div>
+
+                {/* Footer */}
+                {paperMetadata && paperMetadata.footer && (
+                    <div style={{
+                        marginTop: '2rem',
+                        paddingTop: '1rem',
+                        borderTop: '2px solid black',
+                        fontSize: '0.85rem',
+                        textAlign: 'center',
+                        color: '#333'
+                    }}>
+                        {paperMetadata.footer}
+                    </div>
+                )}
             </div>
         </div>
     );

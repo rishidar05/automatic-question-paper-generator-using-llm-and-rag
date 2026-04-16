@@ -23,6 +23,7 @@ function AppContent() {
     const [file, setFile] = useState(null);
     const [patternFile, setPatternFile] = useState(null);
     const [questions, setQuestions] = useState(null);
+    const [paperMetadata, setPaperMetadata] = useState(null);
     const [genLoading, setGenLoading] = useState(false);
     const [error, setError] = useState(null);
 
@@ -91,13 +92,15 @@ function AppContent() {
                 }
             });
             setQuestions(response.data.questions);
+            setPaperMetadata(response.data.paper_metadata || null);
         } catch (err) {
             console.error(err);
             if (err.response?.status === 401 || err.response?.status === 403) {
                 logout();
             }
             const errorMsg = err.response?.data?.error || err.message || 'Failed to generate paper. Please try again.';
-            setError(errorMsg);
+            const details = err.response?.data?.details ? ` (${err.response.data.details})` : '';
+            setError(`${errorMsg}${details}`);
         } finally {
             setGenLoading(false);
         }
@@ -105,6 +108,7 @@ function AppContent() {
 
     const reset = () => {
         setQuestions(null);
+        setPaperMetadata(null);
         setError(null);
         setHistoryPaper(null);
     };
@@ -116,7 +120,11 @@ function AppContent() {
             <Background />
 
             <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexShrink: 0 }}>
-                <h1 className="title" style={{ margin: 0, fontSize: '2.5rem', textAlign: 'left' }}>
+                <h1 
+                    className="title" 
+                    onClick={() => { setView('generator'); reset(); }}
+                    style={{ margin: 0, fontSize: '2.5rem', textAlign: 'left', cursor: 'pointer' }}
+                >
                     <Sparkles size={32} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '1rem' }} />
                     ExamGen AI
                 </h1>
@@ -207,6 +215,7 @@ function AppContent() {
                                             <PaperDisplay
                                                 syllabus={syllabus}
                                                 questions={questions}
+                                                paperMetadata={paperMetadata}
                                                 reset={reset}
                                             />
                                         )}

@@ -10,10 +10,13 @@ import jwt from 'jsonwebtoken';
 import * as Brevo from '@getbrevo/brevo';
 import multer from 'multer';
 import { createRequire } from 'module';
+import Tesseract from 'tesseract.js';
 
 const require = createRequire(import.meta.url);
 const pdf = require('pdf-parse');
 import mammoth from 'mammoth';
+
+const upload = multer();
 
 const getSetting = (key, defaultValue) => {
     // Check environment variables first (for cloud deployment)
@@ -269,6 +272,23 @@ app.post('/api/generate-paper', authenticateToken, upload.fields([
         // Extraction helper
         const extractText = async (fileObj) => {
             if (!fileObj) return '';
+            
+            // Handle images via OCR (Tesseract) [NEW - OCR SUPPORT]
+            if (fileObj.mimetype && fileObj.mimetype.startsWith('image/')) {
+                console.log(`[OCR] Processing image: ${fileObj.originalname} (${fileObj.mimetype})`);
+                try {
+                    const result = await Tesseract.recognize(fileObj.buffer, 'eng', {
+                        logger: m => console.log(`[OCR Progress] ${fileObj.originalname}: ${m.status} - ${Math.round(m.progress * 100)}%`)
+                    });
+                    const text = result.data.text;
+                    console.log(`[OCR] Extraction complete for ${fileObj.originalname}. Extracted length: ${text.length}`);
+                    return text;
+                } catch (ocrErr) {
+                    console.error(`[OCR Error] Failed to process ${fileObj.originalname}:`, ocrErr);
+                    throw new Error(`Failed to extract text from image: ${fileObj.originalname}. Error: ${ocrErr.message}`);
+                }
+            }
+
             if (fileObj.mimetype === 'application/pdf') {
                 const pdfData = await pdf(fileObj.buffer);
                 return pdfData.text;
@@ -320,16 +340,38 @@ app.post('/api/generate-paper', authenticateToken, upload.fields([
 Combine this with the format instruction: ${typeInstruction}`;
             } else {
                 patternContext = `\n[SAMPLE PATTERN - CLONE EXACT STRUCTURE]\n${patternText}\n[END SAMPLE PATTERN]\n`;
-                structureInstruction = `CRITICAL RULES:
-1. Count the exact number of questions in the SAMPLE PATTERN and generate EXACTLY that many NEW questions based ONLY on the SYLLABUS.
-2. You must perfectly mimic the Sections, Marks distribution, and Question Types of the pattern, but the actual question content MUST be new and derived from the SYLLABUS. DO NOT copy pattern questions.
-3. Include the "section" name for each question exactly as they appear in the pattern.
-Combine this with the format instruction: ${typeInstruction}`;
+                structureInstruction = `CRITICAL RULES - YOU MUST FOLLOW ALL OF THESE EXACTLY:
+1. ANALYZE the SAMPLE PATTERN carefully. Count the EXACT number of questions in EACH SECTION separately.
+   - For example, if PART-A has 10 questions and PART-B has 7 questions, you MUST generate exactly 10 questions for PART-A and 7 questions for PART-B = 17 total.
+2. For EACH section, replicate:
+   - The EXACT section name (e.g., "PART-A", "PART-B", "Section A", etc.)
+   - The EXACT number of questions in that section
+   - The EXACT marks per question in that section (e.g., 1 mark for Part-A, 5 marks for Part-B)
+   - The question type used in that section (MCQ vs descriptive)
+3. If the pattern has instruction notes like "Answer all questions" or "Answer any 4 questions", include them in the "section_instruction" field for the FIRST question of each section.
+4. ALL question content MUST be NEW and derived from the SYLLABUS. DO NOT copy any questions from the pattern.
+5. The total number of questions in your output MUST EXACTLY equal the total number of questions in the sample pattern.
+${typeInstruction}`;
             }
         } else {
             const finalCount = (!isNaN(parsedCount) && parsedCount > 0) ? parsedCount : 5;
             structureInstruction = `Generate exactly ${finalCount} NEW questions based on the SYLLABUS. ${typeInstruction}`;
         }
+
+        const metadataInstruction = hasPattern ? `
+            METADATA EXTRACTION: You MUST also extract the following metadata from the SAMPLE PATTERN and include it in "paper_metadata":
+            - institution_name: The college/university/school name (e.g., "Marri Laxman Reddy Institute of Technology and Management")
+            - subtitle: Any subtitle like autonomous status, affiliation (e.g., "AN AUTONOMOUS INSTITUTION - Affiliated to JNTUH")
+            - exam_info: The exam title line (e.g., "B.Tech VIII Semester, Continuous Internal Examination (CIE-II), April-2026")
+            - subject_code_name: Subject code and name (e.g., "2280558 - CLOUD COMPUTING")
+            - branch: Branch/department info (e.g., "CSE/CSM/CSD/CSIT/IT")
+            - duration: Time duration (e.g., "02 Hours")
+            - max_marks: Maximum marks (e.g., "30M")
+            - general_instructions: Array of instruction notes from the top of the paper (e.g., ["Question paper consists of Part-A and Part-B", "In Part-A, answer all questions which carries 10 marks", "In Part-B, answer any four questions which carries 20 marks"])
+            - footer: Any footer info like date, time of exam, prepared by (e.g., "Date of Exam: 02.04.2026 | Time: 10:00AM-12:00PM | Prepared by: Course Coordinator")
+            
+            If any field is not found in the pattern, set it to null.
+            ` : '';
 
         const finalSystemPrompt = `You are an expert AI question paper generator.
             
@@ -344,16 +386,30 @@ Combine this with the format instruction: ${typeInstruction}`;
             DIFFICULTY LEVEL: ${difficulty}
             
             ${structureInstruction}
+            
+            ${metadataInstruction}
             ========================================
             
             CONSTRAINT: Output MUST be a valid JSON object ONLY. No conversational text.
             
             JSON SCHEMA:
             {
+                "paper_metadata": {
+                    "institution_name": "string | null",
+                    "subtitle": "string | null",
+                    "exam_info": "string | null",
+                    "subject_code_name": "string | null",
+                    "branch": "string | null",
+                    "duration": "string | null",
+                    "max_marks": "string | null",
+                    "general_instructions": ["string"] | null,
+                    "footer": "string | null"
+                },
                 "questions": [
                     {
                         "id": number,
-                        "section": "string | null (e.g., 'Section A: Theory')",
+                        "section": "string | null (e.g., 'PART-A', 'PART-B', 'Section A')",
+                        "section_instruction": "string | null (e.g., 'Answer all questions. Each carries 1 mark.'). Only for FIRST question of each section.",
                         "type": "mcq" | "short" | "long",
                         "question": "string",
                         "options": ["string", "string", "string", "string"] | null,
@@ -366,7 +422,9 @@ Combine this with the format instruction: ${typeInstruction}`;
 
         let userPromptText = "Generate now in JSON format.";
         if (hasPattern && !isNaN(parsedCount) && parsedCount > 0) {
-            userPromptText = `CRITICAL COMMAND: Generate EXACTLY ${parsedCount} NEW questions now from the syllabus in JSON format. Do not mimic the pattern's length, only its style. You MUST return exactly ${parsedCount} items in the array.`;
+            userPromptText = `CRITICAL COMMAND: Generate EXACTLY ${parsedCount} NEW questions now from the syllabus in JSON format. Extract paper_metadata from the pattern. You MUST return exactly ${parsedCount} items in the questions array.`;
+        } else if (hasPattern) {
+            userPromptText = `CRITICAL COMMAND: You MUST count every single question in the SAMPLE PATTERN across ALL sections and generate EXACTLY that many NEW questions from the SYLLABUS. Match each section's question count and marks EXACTLY. Also extract ALL paper_metadata from the pattern (institution, subject, time, marks, instructions, footer). Output JSON now.`;
         }
 
         const completion = await groq.chat.completions.create({
